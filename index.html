@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title></title>
+		<style>
+			* {
+				box-sizing: border-box;
+				margin: 0;
+				padding: 0;
+			}
+
+			body {
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+				background-image: linear-gradient(0deg, #eee 1px, transparent 0),
+					linear-gradient(90deg, #eee 1px, transparent 0);
+				background-size: 24px 24px;
+				color: #333;
+				min-height: 100dvh;
+				overflow: hidden;
+			}
+
+			body.is-mobile {
+				overflow-y: auto;
+			}
+
+			#board {
+				position: relative;
+				width: 100vw;
+				height: 100dvh;
+				overflow: hidden;
+			}
+
+			.card {
+				position: absolute;
+				width: 180px;
+				border-radius: 12px;
+				box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+				background: #fff;
+				border: 1px solid rgba(0, 0, 0, 0.08);
+				overflow: hidden;
+				opacity: 0;
+				transform-origin: center;
+				transition: transform 0.35s ease, opacity 0.35s ease, left 0.35s ease,
+					top 0.35s ease, width 0.35s ease, height 0.35s ease,
+					border-radius 0.35s ease;
+			}
+
+			.card.dragging {
+				transition: none;
+				box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+			}
+
+			.card.maximized {
+				box-shadow: 0 24px 48px rgba(0, 0, 0, 0.32);
+			}
+
+			.card-header {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 9px 12px;
+				background: rgba(255, 255, 255, 0.72);
+				cursor: grab;
+				user-select: none;
+				touch-action: pan-y;
+			}
+
+			.card-header.dragging {
+				cursor: grabbing;
+			}
+
+			.window-controls {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+			}
+
+			.window-controls .control {
+				position: relative;
+				width: 12px;
+				height: 12px;
+				border-radius: 50%;
+				border: 1px solid rgba(0, 0, 0, 0.08);
+				background: #ccc;
+				cursor: pointer;
+				outline: none;
+				padding: 0;
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+			}
+
+			.window-controls .control.close {
+				background: #ff5f57;
+				border-color: #e0443e;
+			}
+
+			.window-controls .control.minimize {
+				background: #febb2e;
+				border-color: #dea123;
+			}
+
+			.window-controls .control.maximize {
+				background: #28c840;
+				border-color: #1aab2c;
+			}
+
+			.window-controls .control::after {
+				content: '';
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				opacity: 0;
+				transition: opacity 0.2s ease;
+			}
+
+			.card-header:hover .window-controls .control::after {
+				opacity: 0.8;
+			}
+
+			.window-controls .control.close::after {
+				content: '×';
+				width: auto;
+				height: auto;
+				background: none;
+				font-size: 10px;
+				line-height: 1;
+				font-weight: 700;
+				color: rgba(0, 0, 0, 0.7);
+			}
+
+			.window-controls .control.minimize::after {
+				width: 6px;
+				height: 2px;
+				background: rgba(0, 0, 0, 0.6);
+			}
+
+			.window-controls .control.maximize::after {
+				width: 6px;
+				height: 6px;
+				background: linear-gradient(
+					45deg,
+					rgba(0, 0, 0, 0.6) 0%,
+					rgba(0, 0, 0, 0.6) 45%,
+					transparent 45%,
+					transparent 55%,
+					rgba(0, 0, 0, 0.6) 55%,
+					rgba(0, 0, 0, 0.6) 100%
+				);
+			}
+
+			.card-title {
+				font-size: 12px;
+				font-weight: 600;
+				color: rgba(0, 0, 0, 0.55);
+				padding-left: 8px;
+				flex: 1;
+			}
+
+			.card-body {
+				padding: 14px;
+				font-size: 15px;
+				line-height: 1.4;
+				font-weight: 600;
+				color: rgba(0, 0, 0, 0.7);
+				word-break: break-word;
+			}
+
+			@media (max-width: 480px) {
+				.card {
+					width: min(72vw, 170px);
+				}
+
+				.card-body {
+					padding: 12px;
+					font-size: 14px;
+				}
+
+				.card-title {
+					font-size: 11px;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div id="board"></div>
+
+		<script>
+			const isMobileDevice =
+				window.matchMedia('(pointer: coarse)').matches ||
+				window.innerWidth <= 768
+
+			if (!isMobileDevice) {
+		        window.location.replace('index.html')
+            }
+
+            const board = document.getElementById('board')
+            const messages = [
+                '祝你明媚似骄阳',
+                '冰冰天下第一好',
+                '你已经很棒了，别苛责自己',
+                '梦想成真',
+                '好好吃饭',
+                '湿头发别睡觉',
+                '愿你所有烦恼都消失',
+                '冰冰天下第一漂亮',
+                '一切都会好起来的',
+                '把自己放在第一位',
+                '平安顺遂',
+                '我看见你了，你很好',
+                '步步高升',
+                '喜乐无边，敬此经年',
+                '昭昭如愿，岁岁安澜',
+                '山山而川',
+                '每一步都做数',
+                '遇见你是最幸运的事',
+                '每天都会元气满满',
+                '你的棱角和缺口，同样也是值得珍藏的理由'
+            ]
+
+            const colors = [
+                '#ffe0e3',
+                '#c7f0ff',
+                '#ffd8a8',
+                '#d9f2d9',
+                '#e5d7ff',
+                '#f9f7d9',
+                '#d2f0f8',
+                '#ffd4f5'
+            ]
+
+			const cardStates = new WeakMap()
+			const MAXIMIZED_LAYER = 1000000
+			let activeMaximizedCard = null
+			let isMobile = true
+			const maxCards = 170
+			const spawnInterval = 100
+			const heartGatherDelay = 5000
+			const heartAnimationDuration = 5000
+			let zIndexCursor = 200
+			let animationTriggered = false
+
+			document.body.classList.add('is-mobile')
+
+			function randomFrom(array) {
+				return array[Math.floor(Math.random() * array.length)]
+			}
+
+			function clamp(value, min, max) {
+				return Math.min(Math.max(value, min), max)
+			}
+
+			function generateHeartPoints(count) {
+				const points = []
+				const centerX = window.innerWidth / 2
+				const centerY = window.innerHeight / 2
+
+				const scaleFromHeight = (window.innerHeight * 0.78) / 30
+				const maxWidth = window.innerWidth * 0.9
+				let scale = scaleFromHeight
+				if (scale * 32 > maxWidth) {
+					scale = maxWidth / 32
+				}
+
+				for (let i = 0; i < count; i++) {
+					const t = (i / count) * Math.PI * 2
+					const x = 16 * Math.pow(Math.sin(t), 3)
+					const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t))
+
+					points.push({
+						x: centerX + x * scale,
+						y: centerY + y * scale
+					})
+				}
+
+				return points
+			}
+
+			function triggerHeartAnimation() {
+				if (animationTriggered) return
+				animationTriggered = true
+
+				const cards = Array.from(document.querySelectorAll('.card'))
+				if (cards.length === 0) return
+
+				const heartPoints = generateHeartPoints(cards.length)
+				const centerX = window.innerWidth / 2
+				const centerY = window.innerHeight / 2
+
+				cards.forEach((card, index) => {
+					const state = cardStates.get(card)
+					if (!state || state.closing) return
+
+					const point = heartPoints[index % heartPoints.length]
+					const cardWidth = card.offsetWidth
+					const cardHeight = card.offsetHeight
+
+					card.style.pointerEvents = 'none'
+
+					card.style.transition = `transform ${heartAnimationDuration}ms ease-in-out, opacity ${heartAnimationDuration}ms ease-in-out, left ${heartAnimationDuration}ms ease-in-out, top ${heartAnimationDuration}ms ease-in-out`
+
+					state.left = point.x - cardWidth / 2
+					state.top = point.y - cardHeight / 2
+					state.scale = 0.3
+					state.angle = 0
+
+					card.style.left = `${state.left}px`
+					card.style.top = `${state.top}px`
+					applyTransform(card, state)
+				})
+
+				setTimeout(() => {
+					showFinalCard({ centerX, centerY })
+				}, heartAnimationDuration)
+			}
+
+			function showFinalCard({ centerX, centerY }) {
+				const card = document.createElement('div')
+				card.className = 'card final-card'
+
+				const cardWidth = 220
+
+				card.style.background = '#ff6b9d'
+				card.style.left = `${centerX - cardWidth / 2}px`
+				card.style.top = `${centerY}px`
+				card.style.width = `${cardWidth}px`
+				card.style.zIndex = MAXIMIZED_LAYER + 1
+				card.style.pointerEvents = 'all'
+				card.style.opacity = '0'
+				card.style.transition = 'transform 600ms ease, opacity 600ms ease, top 600ms ease'
+
+				card.innerHTML = `
+					<div class="card-header">
+						<div class="window-controls">
+							<button class="control close" type="button" aria-label="关闭"></button>
+							<button class="control minimize" type="button" aria-label="最小化"></button>
+							<button class="control maximize" type="button" aria-label="最大化"></button>
+						</div>
+						<div class="card-title">❤️ 特别的话 ❤️</div>
+					</div>
+					<div class="card-body" style="font-size: 24px; font-weight: bold; text-align: center; color: #fff; padding: 24px;">天天开心</div>
+				`
+
+				const state = {
+					angle: 0,
+					scale: 0.45,
+					translateX: 0,
+					translateY: 0,
+					left: centerX - cardWidth / 2,
+					top: centerY,
+					maximized: false,
+					closing: false
+				}
+
+				cardStates.set(card, state)
+				applyTransform(card, state)
+				board.appendChild(card)
+
+				requestAnimationFrame(() => {
+					const cardHeight = card.offsetHeight || 0
+					const targetTop = centerY - cardHeight / 2
+
+					state.top = targetTop
+					card.style.top = `${state.top}px`
+
+					state.scale = 1.05
+					applyTransform(card, state)
+					card.style.opacity = '1'
+
+					setTimeout(() => {
+						state.scale = 1
+						applyTransform(card, state)
+					}, 420)
+				})
+
+				const closeBtn = card.querySelector('.control.close')
+				closeBtn.addEventListener('click', event => {
+					event.stopPropagation()
+					card.style.opacity = '0'
+					setTimeout(() => card.remove(), 350)
+				})
+			}
+
+			function applyTransform(card, state) {
+				const scale = state.scale ?? 1
+				const translateX = state.translateX ?? 0
+				const translateY = state.translateY ?? 0
+				const angle = state.angle ?? 0
+				card.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${angle}deg)`
+			}
+
+			function bringToFront(card) {
+				if (card === activeMaximizedCard) {
+					card.style.zIndex = MAXIMIZED_LAYER
+					return
+				}
+
+				zIndexCursor += 1
+				if (activeMaximizedCard && zIndexCursor >= MAXIMIZED_LAYER) {
+					zIndexCursor = MAXIMIZED_LAYER - 1
+				}
+
+				card.style.zIndex = zIndexCursor
+			}
+
+			function setupCardInteractions(card) {
+				const header = card.querySelector('.card-header')
+				const closeBtn = card.querySelector('.control.close')
+				const minimizeBtn = card.querySelector('.control.minimize')
+				const maximizeBtn = card.querySelector('.control.maximize')
+
+				closeBtn.addEventListener('click', event => {
+					event.stopPropagation()
+					closeCard(card)
+				})
+
+				minimizeBtn.addEventListener('click', event => {
+					event.stopPropagation()
+					minimizeCard(card)
+				})
+
+				maximizeBtn.addEventListener('click', event => {
+					event.stopPropagation()
+					toggleMaximize(card)
+				})
+
+				header.addEventListener('pointerdown', event => {
+					if (event.pointerType === 'touch') return
+					startDrag(event, card)
+				})
+
+				card.addEventListener('pointerdown', () => {
+					bringToFront(card)
+				})
+
+				header.addEventListener('dblclick', event => {
+					if (!event.target.closest('.control')) {
+						toggleMaximize(card)
+					}
+				})
+			}
+
+			function closeCard(card) {
+				const state = cardStates.get(card)
+				if (!state || state.closing) return
+				if (card === activeMaximizedCard) {
+					activeMaximizedCard = null
+				}
+				state.closing = true
+				state.scale = 0.1
+				card.style.opacity = '0'
+				applyTransform(card, state)
+
+				const handleTransitionEnd = event => {
+					if (event.propertyName === 'opacity') {
+						card.removeEventListener('transitionend', handleTransitionEnd)
+						card.remove()
+					}
+				}
+
+				card.addEventListener('transitionend', handleTransitionEnd)
+			}
+
+			function minimizeCard(card) {
+				const state = cardStates.get(card)
+				if (!state || state.closing) return
+
+				const runMinimize = () => {
+					state.closing = true
+					bringToFront(card)
+					const bottom = Math.max(window.innerHeight - 24, 0)
+					const targetLeft = clamp(
+						state.left,
+						10,
+						Math.max(window.innerWidth - card.offsetWidth - 10, 10)
+					)
+
+					state.left = targetLeft
+					state.top = bottom
+					state.scale = 0.12
+					state.angle = 0
+					card.style.left = `${targetLeft}px`
+					card.style.top = `${bottom}px`
+					card.style.opacity = '0.35'
+					applyTransform(card, state)
+
+					const handleTransitionEnd = event => {
+						if (event.propertyName === 'transform') {
+							card.removeEventListener('transitionend', handleTransitionEnd)
+							card.remove()
+						}
+					}
+
+					card.addEventListener('transitionend', handleTransitionEnd)
+				}
+
+				if (state.maximized) {
+					activeMaximizedCard = null
+					state.maximized = false
+					card.classList.remove('maximized')
+					card.style.borderRadius = '12px'
+					state.left = 0
+					state.top = 0
+					state.scale = 1
+					state.angle = 0
+					applyTransform(card, state)
+
+					requestAnimationFrame(() => {
+						requestAnimationFrame(runMinimize)
+					})
+					return
+				}
+
+				runMinimize()
+			}
+
+			function toggleMaximize(card) {
+				const state = cardStates.get(card)
+				if (!state || state.closing) return
+
+				if (state.maximized) {
+					restoreFromMaximize(card, state)
+				} else {
+					maximizeCard(card, state)
+				}
+			}
+
+			function maximizeCard(card, state) {
+				state.beforeMaximize = {
+					left: state.left,
+					top: state.top,
+					scale: state.scale ?? 1,
+					width: card.offsetWidth,
+					height: card.offsetHeight,
+					angle: state.angle ?? 0
+				}
+
+				card.classList.add('maximized')
+				card.style.left = '0px'
+				card.style.top = '0px'
+				card.style.width = `${window.innerWidth}px`
+				card.style.height = `${window.innerHeight}px`
+				card.style.borderRadius = '0'
+
+				state.left = 0
+				state.top = 0
+				state.scale = 1
+				state.angle = 0
+				applyTransform(card, state)
+				activeMaximizedCard = card
+				bringToFront(card)
+				state.maximized = true
+			}
+
+			function restoreFromMaximize(card, state) {
+				const previous = state.beforeMaximize
+				if (!previous) return
+
+				card.classList.remove('maximized')
+				card.style.left = `${previous.left}px`
+				card.style.top = `${previous.top}px`
+				card.style.width = `${previous.width}px`
+				card.style.height = `${previous.height}px`
+				card.style.borderRadius = '12px'
+
+				state.left = previous.left
+				state.top = previous.top
+				state.scale = previous.scale ?? 1
+				state.angle = previous.angle ?? state.angle ?? 0
+				applyTransform(card, state)
+				state.maximized = false
+				if (activeMaximizedCard === card) {
+					activeMaximizedCard = null
+				}
+				bringToFront(card)
+				state.lastPosition = { left: state.left, top: state.top }
+
+				setTimeout(() => {
+					if (!state.maximized) {
+						card.style.width = ''
+						card.style.height = ''
+						state.width = card.offsetWidth
+						state.height = card.offsetHeight
+					}
+				}, 360)
+			}
+
+			function startDrag(event, card) {
+				const control = event.target.closest('.control')
+				if (control) return
+
+				const state = cardStates.get(card)
+				if (!state || state.closing || state.maximized) return
+
+				event.preventDefault()
+				bringToFront(card)
+
+				const header = card.querySelector('.card-header')
+				card.classList.add('dragging')
+				header.classList.add('dragging')
+
+				state.dragging = true
+				state.dragOffsetX = event.clientX - state.left
+				state.dragOffsetY = event.clientY - state.top
+
+				let dragFrame = null
+				let pendingLeft = state.left
+				let pendingTop = state.top
+
+				const commitDrag = () => {
+					dragFrame = null
+					const maxLeft = Math.max(window.innerWidth - card.offsetWidth, 0)
+					const maxTop = Math.max(window.innerHeight - card.offsetHeight, 0)
+					state.left = clamp(pendingLeft, -card.offsetWidth * 0.4, maxLeft)
+					state.top = clamp(pendingTop, -card.offsetHeight * 0.4, maxTop)
+					card.style.left = `${state.left}px`
+					card.style.top = `${state.top}px`
+				}
+
+				const handlePointerMove = moveEvent => {
+					if (!state.dragging) return
+
+					pendingLeft = moveEvent.clientX - state.dragOffsetX
+					pendingTop = moveEvent.clientY - state.dragOffsetY
+					if (dragFrame === null) {
+						dragFrame = requestAnimationFrame(commitDrag)
+					}
+				}
+
+				const handlePointerUp = () => {
+					state.dragging = false
+					state.lastPosition = { left: state.left, top: state.top }
+					card.classList.remove('dragging')
+					header.classList.remove('dragging')
+					if (dragFrame !== null) {
+						cancelAnimationFrame(dragFrame)
+						commitDrag()
+					}
+					document.removeEventListener('pointermove', handlePointerMove)
+					document.removeEventListener('pointerup', handlePointerUp)
+				}
+
+				document.addEventListener('pointermove', handlePointerMove)
+				document.addEventListener('pointerup', handlePointerUp)
+			}
+
+			function createCard() {
+				const card = document.createElement('div')
+				card.className = 'card'
+
+				const color = randomFrom(colors)
+				const angle = (Math.random() - 0.5) * 8
+				const cardWidth = 180
+				const cardHeight = 122
+				const horizontalMargin = 10
+				const verticalMargin = 10
+				const left =
+					horizontalMargin +
+					Math.random() *
+						Math.max(window.innerWidth - cardWidth - horizontalMargin * 2, 0)
+				const top =
+					verticalMargin +
+					Math.random() *
+						Math.max(window.innerHeight - cardHeight - verticalMargin * 2, 0)
+
+				card.style.background = color
+				card.style.left = `${left}px`
+				card.style.top = `${top}px`
+				if (activeMaximizedCard && zIndexCursor >= MAXIMIZED_LAYER - 2) {
+					zIndexCursor = MAXIMIZED_LAYER - 2
+				}
+				card.style.zIndex = ++zIndexCursor
+
+				card.innerHTML = `
+					<div class="card-header">
+						<div class="window-controls">
+							<button class="control close" type="button" aria-label="关闭"></button>
+							<button class="control minimize" type="button" aria-label="最小化"></button>
+							<button class="control maximize" type="button" aria-label="最大化"></button>
+						</div>
+						<div class="card-title">温馨提示</div>
+					</div>
+					<div class="card-body">${randomFrom(messages)}</div>
+				`
+
+				const state = {
+					angle,
+					scale: 0.9,
+					translateX: 0,
+					translateY: 0,
+					left,
+					top,
+					maximized: false,
+					closing: false,
+					lastPosition: { left, top }
+				}
+
+				cardStates.set(card, state)
+				applyTransform(card, state)
+				board.appendChild(card)
+
+				state.width = card.offsetWidth
+				state.height = card.offsetHeight
+
+				requestAnimationFrame(() => {
+					state.scale = 1
+					applyTransform(card, state)
+					card.style.opacity = '1'
+				})
+
+				setupCardInteractions(card)
+
+				if (board.children.length > maxCards) {
+					const oldest = board.firstElementChild
+					if (oldest && oldest !== card) {
+						oldest.remove()
+					}
+				}
+			}
+
+			for (let delay = 0; delay < heartGatherDelay; delay += spawnInterval) {
+				setTimeout(() => {
+					if (!animationTriggered) {
+						createCard()
+					}
+				}, delay)
+			}
+
+			setTimeout(() => {
+				triggerHeartAnimation()
+			}, heartGatherDelay)
+
+			window.addEventListener('resize', () => {
+				const stillMobile =
+					window.matchMedia('(pointer: coarse)').matches ||
+					window.innerWidth <= 768
+				if (!stillMobile) {
+					window.location.replace('index.html')
+					return
+				}
+
+				document.body.classList.add('is-mobile')
+
+				document.querySelectorAll('.card.maximized').forEach(card => {
+					card.style.width = `${window.innerWidth}px`
+					card.style.height = `${window.innerHeight}px`
+				})
+			})
+		</script>
+	</body>
+</html>
+
+
+
